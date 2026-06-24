@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt-to-Action Agent</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #11161d;
+    --border: #232b36;
+    --text: #d6deeb;
+    --muted: #6b7785;
+    --accent: #5ee6a3;
+    --accent-dim: #2c5c46;
+    --warn: #ff8a65;
+    --mono: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px;
+  }
+
+  .wrap { width: 100%; max-width: 760px; }
+
+  .eyebrow {
+    color: var(--accent);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .sub {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 36px;
+    line-height: 1.6;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 14px;
+    border-radius: 6px;
+    outline: none;
+  }
+
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); }
+
+  button {
+    background: var(--accent);
+    color: #06140d;
+    border: none;
+    padding: 14px 22px;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  .examples {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 32px;
+  }
+  .examples button {
+    background: none;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    font-size: 11px;
+    border-radius: 4px;
+    margin: 4px 6px 0 0;
+  }
+  .examples button:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .panel.show { display: block; }
+
+  .panel-label {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+
+  #trace {
+    white-space: pre-wrap;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #9fb3c8;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  #answer {
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  .meta-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .file-chip {
+    display: inline-block;
+    background: var(--accent-dim);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 12px;
+    margin-top: 8px;
+  }
+  .file-chip:hover { opacity: 0.85; }
+
+  .suggestions { list-style: none; padding: 0; margin: 0; }
+  .suggestions li {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 6px 0;
+  }
+  .suggestions li::before { content: "→ "; color: var(--accent); }
+
+  .error-text { color: var(--warn); font-size: 13px; }
+
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--accent-dim);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="eyebrow">prompt → action</div>
+    <h1>Prompt-to-Action Agent</h1>
+    <div class="sub">
+      Type one goal in plain English. The agent plans the steps, calls real tools
+      (search, calculate, write files), and hands back a finished result.
+    </div>
+
+    <div class="input-row">
+      <input type="text" id="goalInput" placeholder="Research the top 3 AI agent frameworks and save a comparison to frameworks.md" />
+      <button id="runBtn" onclick="runAgent()">Run</button>
+    </div>
+
+    <div class="examples">
+      Try:
+      <button onclick="fillExample(this)">Calculate 18% tip on a 2400 bill and save the result to tip.txt</button>
+      <button onclick="fillExample(this)">Search for the latest LangChain release and summarize it</button>
+    </div>
+
+    <div class="panel" id="tracePanel">
+      <div class="panel-label">Agent reasoning &amp; tool calls</div>
+      <div id="trace"></div>
+    </div>
+
+    <div class="panel" id="resultPanel">
+      <div class="panel-label">Result</div>
+      <div id="answer"></div>
+      <div id="fileLinks"></div>
+      <div class="meta-row" id="metaRow"></div>
+      <ul class="suggestions" id="suggestionsList"></ul>
+    </div>
+
+    <div class="panel" id="errorPanel">
+      <div class="panel-label">Something went wrong</div>
+      <div class="error-text" id="errorText"></div>
+    </div>
+  </div>
+
+<script>
+function fillExample(btn) {
+  document.getElementById('goalInput').value = btn.textContent;
+}
+
+async function runAgent() {
+  const goal = document.getElementById('goalInput').value.trim();
+  if (!goal) return;
+
+  const btn = document.getElementById('runBtn');
+  const tracePanel = document.getElementById('tracePanel');
+  const resultPanel = document.getElementById('resultPanel');
+  const errorPanel = document.getElementById('errorPanel');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Working';
+  resultPanel.classList.remove('show');
+  errorPanel.classList.remove('show');
+  tracePanel.classList.add('show');
+  document.getElementById('trace').textContent = 'Agent is planning...';
+
+  try {
+    const res = await fetch('/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({goal})
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errorPanel.classList.add('show');
+      document.getElementById('errorText').textContent = data.error || 'Unknown error';
+      tracePanel.classList.remove('show');
+      return;
+    }
+
+    document.getElementById('trace').textContent = data.trace || '(no trace)';
+    document.getElementById('answer').textContent = data.answer;
+
+    const fileLinks = document.getElementById('fileLinks');
+    fileLinks.innerHTML = '';
+    (data.saved_files || []).forEach(f => {
+      const a = document.createElement('a');
+      a.href = '/outputs/' + encodeURIComponent(f);
+      a.className = 'file-chip';
+      a.textContent = '⬇ ' + f;
+      fileLinks.appendChild(a);
+    });
+
+    document.getElementById('metaRow').textContent = `${data.tool_calls} tool call(s) made`;
+
+    const list = document.getElementById('suggestionsList');
+    list.innerHTML = '';
+    (data.suggestions || []).forEach(s => {
+      const li = document.createElement('li');
+      li.textContent = s;
+      list.appendChild(li);
+    });
+
+    resultPanel.classList.add('show');
+  } catch (err) {
+    errorPanel.classList.add('show');
+    document.getElementById('errorText').textContent = 'Network or server error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run';
+  }
+}
+
+document.getElementById('goalInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') runAgent();
+});
+</script>
+</body>
+</html>
